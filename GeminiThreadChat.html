@@ -1,0 +1,2206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ThreadChat — Branching Gemini Chat</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #16181c;
+      --surface-hover: #1d1f23;
+      --border: #2f3336;
+      --text: #e7e9ea;
+      --muted: #71767b;
+      --accent: #1d9bf0;
+      --accent-hover: #1a8cd8;
+      --gemini: #8ab4f8;
+      --gemini-bg: rgba(138, 180, 248, 0.12);
+      --danger: #f4212e;
+      --success: #00ba7c;
+      --thread-line: #333639;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.45;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 1600px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .app.sidebar-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .app.sidebar-collapsed .sidebar {
+      display: none;
+    }
+
+    /* Compact Configuration Sidebar */
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 14px 12px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      padding: 2px 4px;
+    }
+
+    .brand-badge {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1d9bf0, #8ab4f8);
+      display: grid;
+      place-items: center;
+      color: #000;
+      font-weight: 900;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .status-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .status-dot::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+
+    .status-dot.ready { color: var(--success); }
+    .status-dot.ready::before { background: var(--success); }
+
+    label {
+      font-size: 11px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .checkbox-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin: 2px 0 0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      margin: 0;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .checkbox-pill.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(29, 155, 240, 0.12);
+    }
+
+    input[type="password"],
+    input[type="text"],
+    select,
+    textarea.settings-input {
+      width: 100%;
+      background: #0b0d10;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      padding: 7px 9px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      border-radius: 9999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s, transform 0.08s;
+      font-family: inherit;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--surface-hover);
+    }
+
+    .btn:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .btn-sm {
+      padding: 5px 11px;
+      font-size: 12px;
+    }
+
+    .btn-danger {
+      color: var(--danger);
+      border-color: rgba(244, 33, 46, 0.35);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(244, 33, 46, 0.12);
+    }
+
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    /* Spacious Main Chat Window */
+    .main {
+      border-right: 1px solid var(--border);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .global-error {
+      display: none;
+      margin: 12px 24px 0;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: rgba(244, 33, 46, 0.14);
+      border: 1px solid rgba(244, 33, 46, 0.45);
+      color: #ff949c;
+      font-size: 13px;
+    }
+
+    /* Composer */
+    .composer {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 14px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .composer-inline {
+      padding: 12px 24px 16px 76px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(29, 155, 240, 0.04);
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 14px;
+      user-select: none;
+    }
+
+    .avatar-user {
+      background: #1d9bf0;
+      color: #fff;
+    }
+
+    .avatar-gemini {
+      background: linear-gradient(135deg, #4285f4, #9b72cb, #d96570);
+      color: #fff;
+    }
+
+    .composer-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .composer textarea {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text);
+      font-size: 16px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      min-height: 56px;
+      padding: 4px 0;
+    }
+
+    .composer-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 8px;
+      border-top: 1px solid rgba(47, 51, 54, 0.6);
+      margin-top: 6px;
+      gap: 8px;
+    }
+
+    /* Posts & Threads */
+    .feed {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .thread-root {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .post {
+      display: flex;
+      gap: 14px;
+      padding: 14px 24px;
+      position: relative;
+      transition: background 0.12s;
+    }
+
+    .post:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .post.focused {
+      background: rgba(29, 155, 240, 0.06);
+      border-left: 3px solid var(--accent);
+      padding-left: 21px;
+    }
+
+    .post-gutter {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 40px;
+      flex-shrink: 0;
+    }
+
+    .thread-connector-top {
+      width: 2px;
+      height: 10px;
+      background: var(--thread-line);
+      margin-bottom: 4px;
+    }
+
+    .thread-connector-bottom {
+      width: 2px;
+      flex: 1;
+      min-height: 12px;
+      background: var(--thread-line);
+      margin-top: 4px;
+    }
+
+    .post-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .post-header {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .author-name {
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .author-handle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .model-badge {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 9999px;
+      background: var(--gemini-bg);
+      color: var(--gemini);
+      font-weight: 600;
+    }
+
+    .search-badge {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 9999px;
+      background: rgba(0, 186, 124, 0.14);
+      color: #5ee6b5;
+      font-weight: 600;
+    }
+
+    .branch-badge {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--muted);
+    }
+
+    .post-content {
+      font-size: 15px;
+      word-wrap: break-word;
+      overflow-wrap: anywhere;
+      cursor: text;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .post-content pre {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      overflow-x: auto;
+      font-size: 13px;
+      margin: 8px 0;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .post-content code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 5px;
+      border-radius: 4px;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .post-content pre code {
+      background: transparent;
+      padding: 0;
+    }
+
+    .post-content a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .post-content a:hover {
+      text-decoration: underline;
+    }
+
+    /* Google Search Grounding Sources */
+    .grounding-box {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .grounding-queries {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .grounding-sources {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .source-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 11px;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .source-pill:hover {
+      border-color: var(--accent);
+      background: rgba(29, 155, 240, 0.1);
+    }
+
+    .post-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .action-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 4px 9px;
+      border-radius: 9999px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.12s, color 0.12s;
+      user-select: none;
+    }
+
+    .action-btn:hover {
+      background: rgba(29, 155, 240, 0.12);
+      color: var(--accent);
+    }
+
+    .action-btn.has-subreplies {
+      color: var(--accent);
+      background: rgba(29, 155, 240, 0.1);
+      font-weight: 600;
+    }
+
+    .action-btn.has-subreplies:hover {
+      background: rgba(29, 155, 240, 0.2);
+    }
+
+    .action-btn.parent-nav {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.07);
+      font-weight: 600;
+    }
+
+    .action-btn.parent-nav:hover {
+      background: rgba(29, 155, 240, 0.18);
+      color: var(--accent);
+    }
+
+    .action-btn.delete:hover {
+      background: rgba(244, 33, 46, 0.12);
+      color: var(--danger);
+    }
+
+    .branch-group {
+      border-left: 2px solid var(--thread-line);
+      margin-left: 43px;
+    }
+
+    .branch-label {
+      font-size: 11px;
+      color: var(--muted);
+      padding: 6px 24px 2px 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-top: 1px dashed var(--border);
+    }
+
+    .pending-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 24px 14px 78px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(244, 33, 46, 0.12);
+      border: 1px solid rgba(244, 33, 46, 0.35);
+      color: #ff8a93;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .empty-state {
+      padding: 56px 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty-state h2 {
+      color: var(--text);
+      margin: 0 0 8px;
+      font-size: 20px;
+    }
+
+    .section-divider {
+      padding: 8px 24px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Modals */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(91, 112, 131, 0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: 100%;
+      max-width: 660px;
+      max-height: 86vh;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 800;
+    }
+
+    .modal-body {
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .modal-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .modal-section h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .radio-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+
+    .radio-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .transfer-status {
+      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .transfer-status.ok {
+      display: block;
+      background: rgba(0, 186, 124, 0.14);
+      border: 1px solid rgba(0, 186, 124, 0.4);
+      color: #5ee6b5;
+    }
+
+    .transfer-status.err {
+      display: block;
+      background: rgba(244, 33, 46, 0.14);
+      border: 1px solid rgba(244, 33, 46, 0.4);
+      color: #ff949c;
+    }
+
+    .ctx-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: var(--surface);
+      font-size: 13px;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .ctx-role {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      color: var(--accent);
+    }
+
+    .ctx-role.model { color: var(--gemini); }
+
+    @media (max-width: 820px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+      .main {
+        border-right: none;
+      }
+      .post, .composer, .topbar, .section-divider {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+      .composer-inline {
+        padding-left: 56px;
+        padding-right: 14px;
+      }
+      .branch-group {
+        margin-left: 33px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="appShell" class="app">
+    <!-- Slim Configuration Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">G</div>
+        <span>ThreadChat</span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">
+          <span>Gemini API Key</span>
+          <span id="keyStatus" class="status-dot">Missing</span>
+        </div>
+        <input id="apiKeyInput" type="password" placeholder="AIza..." autocomplete="off" />
+        <div class="row">
+          <button id="toggleKeyBtn" class="btn btn-sm" type="button">Show</button>
+          <button id="saveKeyBtn" class="btn btn-primary btn-sm" type="button">Save</button>
+          <button id="clearKeyBtn" class="btn btn-sm" type="button">Clear</button>
+        </div>
+        <div id="storageHint" class="hint">Auto-saved locally in your browser.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span>Model &amp; Persona</span></div>
+        <div>
+          <label for="modelSelect">Model</label>
+          <select id="modelSelect">
+            <option value="gemini-4-hydrogen">gemini-4-hydrogen (Default)</option>
+            <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+            <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Fast)</option>
+            <option value="gemini-4-argon">gemini-4-argon (Reasoning)</option>
+            <option value="gemini-4-carbon">gemini-4-carbon (Deep)</option>
+            <option value="custom">Custom model ID...</option>
+          </select>
+        </div>
+        <div id="customModelWrap" style="display:none;">
+          <label for="customModelInput">Custom Model ID</label>
+          <input id="customModelInput" type="text" placeholder="e.g. gemini-4-hydrogen" />
+        </div>
+        <div>
+          <label class="checkbox-label">
+            <input id="googleSearchChkSidebar" type="checkbox" />
+            <span>Enable Google Search</span>
+          </label>
+          <div class="hint" style="margin-top:3px;">Lets Gemini ground answers with live web search &amp; sources.</div>
+        </div>
+        <div>
+          <label for="systemPromptInput">System Instruction</label>
+          <textarea id="systemPromptInput" class="settings-input" rows="3"
+            placeholder="Optional persona...">Reply concisely and clearly, like a thoughtful conversation on Twitter/X unless asked for deep detail.</textarea>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span>Chat History</span></div>
+        <div id="historyStats" class="hint">0 threads · 0 posts</div>
+        <div class="row" style="flex-wrap: wrap;">
+          <button id="exportBtn" class="btn btn-sm" type="button">Export JSON</button>
+          <button id="importBtn" class="btn btn-sm" type="button">Import...</button>
+          <button id="clearAllBtn" class="btn btn-danger btn-sm" type="button">Clear All</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Wide Main Chat Window -->
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="backHomeBtn" class="btn btn-sm" type="button" style="display:none;">← Timeline</button>
+          <button id="parentBtn" class="btn btn-primary btn-sm" type="button" style="display:none;">↑ Go to Parent</button>
+          <div>
+            <h1 id="viewTitle">Home Timeline</h1>
+            <div id="viewSubtitle" class="subtitle">Showing posts and their immediate replies only</div>
+          </div>
+        </div>
+        <div class="row" style="flex-wrap: wrap;">
+          <label id="googleSearchPill" class="checkbox-pill" title="Enable or disable Google Search grounding">
+            <input id="googleSearchChkTop" type="checkbox" />
+            <span>🔍 Google Search</span>
+          </label>
+          <button id="openBackupBtn" class="btn btn-sm" type="button">⇅ Backup / Import</button>
+          <button id="toggleSidebarBtn" class="btn btn-sm" type="button">Hide Config</button>
+        </div>
+      </header>
+
+      <div id="globalError" class="global-error"></div>
+
+      <!-- Root Composer (Timeline mode) -->
+      <section id="rootComposer" class="composer">
+        <div class="avatar avatar-user">You</div>
+        <div class="composer-body">
+          <textarea id="rootInput" placeholder="Start a new thread with Gemini... (Ctrl+Enter to post)"></textarea>
+          <div class="composer-footer">
+            <span id="rootHint" class="hint">New root thread (no prior context)</span>
+            <button id="rootPostBtn" class="btn btn-primary btn-sm" type="button">Post</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Feed Container -->
+      <div id="feed" class="feed"></div>
+    </main>
+  </div>
+
+  <!-- Context Inspector Modal -->
+  <div id="contextModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Parent-Only Context Sent to Gemini</span>
+        <button id="closeModalBtn" class="btn btn-sm" type="button">Close</button>
+      </div>
+      <div id="contextModalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Full Chat History Export / Import Modal -->
+  <div id="backupModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Full Chat History — Export &amp; Import</span>
+        <button id="closeBackupBtn" class="btn btn-sm" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <div id="transferStatus" class="transfer-status"></div>
+
+        <div class="modal-section">
+          <h3>Export Full History</h3>
+          <div id="modalStats" class="hint">0 threads · 0 posts</div>
+          <div class="hint">
+            Includes all posts, branching trees, timestamps, model names, search sources, and settings. Your API key is never exported.
+          </div>
+          <div class="row" style="flex-wrap: wrap;">
+            <button id="downloadJsonBtn" class="btn btn-primary btn-sm" type="button">⬇ Download Full JSON (.json)</button>
+            <button id="downloadMdBtn" class="btn btn-sm" type="button">⬇ Download Readable (.md)</button>
+            <button id="copyJsonBtn" class="btn btn-sm" type="button">📋 Copy JSON</button>
+          </div>
+        </div>
+
+        <div class="modal-section">
+          <h3>Import Full History</h3>
+          <div class="radio-row">
+            <label><input type="radio" name="importMode" value="merge" checked /> Merge with existing chats</label>
+            <label><input type="radio" name="importMode" value="replace" /> Replace all existing chats</label>
+          </div>
+          <div class="radio-row">
+            <label><input id="restoreSettingsChk" type="checkbox" checked /> Also restore model, search toggle &amp; system instruction</label>
+          </div>
+          <div class="row" style="flex-wrap: wrap;">
+            <button id="chooseFileImportBtn" class="btn btn-primary btn-sm" type="button">📁 Choose .json File</button>
+            <input id="importFileInput" type="file" accept=".json,application/json" style="display:none;" />
+          </div>
+          <div>
+            <label for="pasteJsonInput">Or paste exported JSON directly:</label>
+            <textarea id="pasteJsonInput" class="settings-input" rows="5" placeholder='{"app":"ThreadChat","rootIds":[...],"posts":{...}}'></textarea>
+          </div>
+          <div class="row">
+            <button id="importPasteBtn" class="btn btn-sm" type="button">Import Pasted JSON</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function initThreadChat() {
+      const DEFAULT_SYSTEM_PROMPT =
+        'Reply concisely and clearly, like a thoughtful conversation on Twitter/X unless asked for deep detail.';
+
+      const BT = String.fromCharCode(96);
+      const FENCE_RE = new RegExp(BT + BT + BT + '([a-zA-Z0-9_-]*)\\n?([\\s\\S]*?)' + BT + BT + BT, 'g');
+      const INLINE_CODE_RE = new RegExp(BT + '([^' + BT + '\\n]+)' + BT, 'g');
+
+      const memoryStorage = {};
+      let storageBlocked = false;
+      const safeStorage = {
+        get(key) {
+          try {
+            return window.localStorage.getItem(key);
+          } catch {
+            storageBlocked = true;
+            return Object.prototype.hasOwnProperty.call(memoryStorage, key) ? memoryStorage[key] : null;
+          }
+        },
+        set(key, value) {
+          memoryStorage[key] = String(value);
+          try {
+            window.localStorage.setItem(key, String(value));
+          } catch {
+            storageBlocked = true;
+          }
+        },
+        remove(key) {
+          delete memoryStorage[key];
+          try {
+            window.localStorage.removeItem(key);
+          } catch {
+            storageBlocked = true;
+          }
+        }
+      };
+
+      const STORAGE_KEYS = {
+        API_KEY: 'threadchat_gemini_api_key',
+        MODEL: 'threadchat_gemini_model',
+        CUSTOM_MODEL: 'threadchat_gemini_custom_model',
+        SYSTEM_PROMPT: 'threadchat_gemini_system_prompt',
+        GOOGLE_SEARCH: 'threadchat_google_search',
+        TREE: 'threadchat_posts_v1',
+        SIDEBAR_COLLAPSED: 'threadchat_sidebar_collapsed'
+      };
+
+      const savedPrompt = safeStorage.get(STORAGE_KEYS.SYSTEM_PROMPT);
+      const state = {
+        apiKey: safeStorage.get(STORAGE_KEYS.API_KEY) || '',
+        model: safeStorage.get(STORAGE_KEYS.MODEL) || 'gemini-4-hydrogen',
+        customModel: safeStorage.get(STORAGE_KEYS.CUSTOM_MODEL) || '',
+        systemPrompt: savedPrompt === null ? DEFAULT_SYSTEM_PROMPT : savedPrompt,
+        googleSearch: safeStorage.get(STORAGE_KEYS.GOOGLE_SEARCH) === '1',
+        sidebarCollapsed: safeStorage.get(STORAGE_KEYS.SIDEBAR_COLLAPSED) === '1',
+        posts: {},
+        rootIds: [],
+        focusedId: null,
+        replyingToId: null,
+        loadingParents: new Set()
+      };
+
+      try {
+        const saved = JSON.parse(safeStorage.get(STORAGE_KEYS.TREE) || 'null');
+        if (saved && saved.posts && Array.isArray(saved.rootIds)) {
+          state.posts = saved.posts;
+          state.rootIds = saved.rootIds;
+        }
+      } catch (e) {
+        console.warn('Could not parse saved tree:', e);
+      }
+
+      const el = {
+        appShell: document.getElementById('appShell'),
+        apiKeyInput: document.getElementById('apiKeyInput'),
+        keyStatus: document.getElementById('keyStatus'),
+        storageHint: document.getElementById('storageHint'),
+        toggleKeyBtn: document.getElementById('toggleKeyBtn'),
+        saveKeyBtn: document.getElementById('saveKeyBtn'),
+        clearKeyBtn: document.getElementById('clearKeyBtn'),
+        modelSelect: document.getElementById('modelSelect'),
+        customModelWrap: document.getElementById('customModelWrap'),
+        customModelInput: document.getElementById('customModelInput'),
+        googleSearchChkSidebar: document.getElementById('googleSearchChkSidebar'),
+        googleSearchChkTop: document.getElementById('googleSearchChkTop'),
+        googleSearchPill: document.getElementById('googleSearchPill'),
+        systemPromptInput: document.getElementById('systemPromptInput'),
+        historyStats: document.getElementById('historyStats'),
+        exportBtn: document.getElementById('exportBtn'),
+        importBtn: document.getElementById('importBtn'),
+        clearAllBtn: document.getElementById('clearAllBtn'),
+        backHomeBtn: document.getElementById('backHomeBtn'),
+        parentBtn: document.getElementById('parentBtn'),
+        openBackupBtn: document.getElementById('openBackupBtn'),
+        toggleSidebarBtn: document.getElementById('toggleSidebarBtn'),
+        viewTitle: document.getElementById('viewTitle'),
+        viewSubtitle: document.getElementById('viewSubtitle'),
+        globalError: document.getElementById('globalError'),
+        rootComposer: document.getElementById('rootComposer'),
+        rootInput: document.getElementById('rootInput'),
+        rootHint: document.getElementById('rootHint'),
+        rootPostBtn: document.getElementById('rootPostBtn'),
+        feed: document.getElementById('feed'),
+        contextModal: document.getElementById('contextModal'),
+        contextModalBody: document.getElementById('contextModalBody'),
+        closeModalBtn: document.getElementById('closeModalBtn'),
+        backupModal: document.getElementById('backupModal'),
+        closeBackupBtn: document.getElementById('closeBackupBtn'),
+        transferStatus: document.getElementById('transferStatus'),
+        modalStats: document.getElementById('modalStats'),
+        downloadJsonBtn: document.getElementById('downloadJsonBtn'),
+        downloadMdBtn: document.getElementById('downloadMdBtn'),
+        copyJsonBtn: document.getElementById('copyJsonBtn'),
+        restoreSettingsChk: document.getElementById('restoreSettingsChk'),
+        chooseFileImportBtn: document.getElementById('chooseFileImportBtn'),
+        importFileInput: document.getElementById('importFileInput'),
+        pasteJsonInput: document.getElementById('pasteJsonInput'),
+        importPasteBtn: document.getElementById('importPasteBtn')
+      };
+
+      function showGlobalError(msg) {
+        el.globalError.textContent = msg;
+        el.globalError.style.display = 'block';
+      }
+
+      window.addEventListener('error', (e) => {
+        showGlobalError('Script error: ' + e.message);
+      });
+
+      if (storageBlocked) {
+        el.storageHint.textContent = 'Browser blocked localStorage; running in session memory.';
+      }
+
+      el.apiKeyInput.value = state.apiKey;
+      el.modelSelect.value = state.model;
+      if (!el.modelSelect.value) {
+        el.modelSelect.value = 'gemini-4-hydrogen';
+        state.model = 'gemini-4-hydrogen';
+      }
+      el.customModelInput.value = state.customModel;
+      el.systemPromptInput.value = state.systemPrompt;
+      updateKeyStatus();
+      updateCustomModelVisibility();
+      applySidebarState();
+      syncGoogleSearchUI();
+
+      function syncGoogleSearchUI() {
+        el.googleSearchChkSidebar.checked = state.googleSearch;
+        el.googleSearchChkTop.checked = state.googleSearch;
+        el.googleSearchPill.classList.toggle('active', state.googleSearch);
+      }
+
+      function setGoogleSearchEnabled(enabled) {
+        state.googleSearch = Boolean(enabled);
+        safeStorage.set(STORAGE_KEYS.GOOGLE_SEARCH, state.googleSearch ? '1' : '0');
+        syncGoogleSearchUI();
+      }
+
+      function applySidebarState() {
+        el.appShell.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
+        el.toggleSidebarBtn.textContent = state.sidebarCollapsed ? 'Show Config' : 'Hide Config';
+      }
+
+      function saveTree() {
+        safeStorage.set(STORAGE_KEYS.TREE, JSON.stringify({
+          posts: state.posts,
+          rootIds: state.rootIds
+        }));
+        updateHistoryStats();
+      }
+
+      function updateHistoryStats() {
+        const postCount = Object.keys(state.posts).length;
+        const threadCount = state.rootIds.filter(id => state.posts[id]).length;
+        const bytes = new Blob([JSON.stringify({ posts: state.posts, rootIds: state.rootIds })]).size;
+        const kb = (bytes / 1024).toFixed(1);
+        const text = `${threadCount} ${threadCount === 1 ? 'thread' : 'threads'} · ${postCount} ${postCount === 1 ? 'post' : 'posts'} (${kb} KB)`;
+        el.historyStats.textContent = text;
+        el.modalStats.textContent = text;
+      }
+
+      function syncApiKeyFromInput() {
+        state.apiKey = el.apiKeyInput.value.trim();
+        if (state.apiKey) {
+          safeStorage.set(STORAGE_KEYS.API_KEY, state.apiKey);
+        }
+        updateKeyStatus();
+      }
+
+      function updateKeyStatus() {
+        const hasKey = Boolean(state.apiKey.trim());
+        el.keyStatus.textContent = hasKey ? 'Ready' : 'Missing';
+        el.keyStatus.className = hasKey ? 'status-dot ready' : 'status-dot';
+      }
+
+      function updateCustomModelVisibility() {
+        el.customModelWrap.style.display = el.modelSelect.value === 'custom' ? 'block' : 'none';
+      }
+
+      function activeModelId() {
+        return state.model === 'custom'
+          ? (state.customModel.trim() || 'gemini-4-hydrogen')
+          : state.model;
+      }
+
+      function uid() {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+          return crypto.randomUUID();
+        }
+        return 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+      }
+
+      async function copyToClipboard(text) {
+        if (navigator.clipboard && window.isSecureContext) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return true;
+          } catch {}
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        let ok = false;
+        try {
+          ok = document.execCommand('copy');
+        } catch {}
+        document.body.removeChild(ta);
+        return ok;
+      }
+
+      // =========================================================================
+      // STRICT PARENT-ONLY CONTEXT: Walk UP parentId pointers, ignore siblings
+      // =========================================================================
+      function getAncestors(postId) {
+        const chain = [];
+        const visited = new Set();
+        let curr = state.posts[postId];
+        while (curr && !visited.has(curr.id)) {
+          visited.add(curr.id);
+          chain.push(curr);
+          curr = curr.parentId ? state.posts[curr.parentId] : null;
+        }
+        return chain.reverse();
+      }
+
+      function buildGeminiContents(targetPostId) {
+        const ancestors = getAncestors(targetPostId);
+        const contents = [];
+
+        for (const node of ancestors) {
+          const role = node.author === 'user' ? 'user' : 'model';
+          const parts = (Array.isArray(node.rawParts) && node.rawParts.length > 0)
+            ? JSON.parse(JSON.stringify(node.rawParts))
+            : [{ text: node.text }];
+
+          const prev = contents[contents.length - 1];
+          if (prev && prev.role === role) {
+            prev.parts.push(...parts);
+          } else {
+            contents.push({ role, parts });
+          }
+        }
+        return contents;
+      }
+
+      async function callGemini(contents, modelId) {
+        const key = (state.apiKey || el.apiKeyInput.value).trim();
+        if (!key) {
+          throw new Error('Please paste your Gemini API key in the Config sidebar first.');
+        }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent`;
+        const payload = { contents };
+
+        const sys = state.systemPrompt.trim();
+        if (sys) {
+          payload.systemInstruction = { parts: [{ text: sys }] };
+        }
+
+        if (state.googleSearch) {
+          payload.tools = [{ google_search: {} }];
+        }
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': key
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data?.error?.message || `HTTP ${res.status} ${res.statusText}`;
+          throw new Error(msg);
+        }
+
+        const candidate = data?.candidates?.[0];
+        const parts = candidate?.content?.parts;
+        if (!Array.isArray(parts) || parts.length === 0) {
+          const reason = candidate?.finishReason || 'Empty response';
+          throw new Error(`Gemini returned no content (${reason}).`);
+        }
+
+        const visibleText = parts
+          .filter(p => !p.thought && typeof p.text === 'string')
+          .map(p => p.text)
+          .join('\n')
+          .trim();
+
+        let grounding = null;
+        const gm = candidate?.groundingMetadata;
+        if (gm) {
+          const queries = Array.isArray(gm.webSearchQueries)
+            ? gm.webSearchQueries.filter(q => typeof q === 'string' && q.trim())
+            : [];
+          const seenUri = new Set();
+          const sources = [];
+          if (Array.isArray(gm.groundingChunks)) {
+            for (const chunk of gm.groundingChunks) {
+              const web = chunk?.web;
+              if (web && typeof web.uri === 'string' && /^https?:\/\//i.test(web.uri) && !seenUri.has(web.uri)) {
+                seenUri.add(web.uri);
+                sources.push({
+                  uri: web.uri,
+                  title: (typeof web.title === 'string' && web.title.trim()) ? web.title.trim() : web.uri
+                });
+              }
+            }
+          }
+          if (queries.length > 0 || sources.length > 0) {
+            grounding = { queries, sources };
+          }
+        }
+
+        return {
+          text: visibleText || '[No text output]',
+          rawParts: parts,
+          grounding
+        };
+      }
+
+      async function createPostAndReply(text, parentId = null) {
+        const clean = text.trim();
+        if (!clean) return;
+
+        syncApiKeyFromInput();
+
+        const userPost = {
+          id: uid(),
+          parentId,
+          author: 'user',
+          text: clean,
+          rawParts: [{ text: clean }],
+          createdAt: Date.now(),
+          childrenIds: [],
+          error: null
+        };
+
+        state.posts[userPost.id] = userPost;
+        if (parentId && state.posts[parentId]) {
+          state.posts[parentId].childrenIds.push(userPost.id);
+          state.focusedId = userPost.id;
+        } else {
+          state.rootIds.unshift(userPost.id);
+        }
+
+        state.replyingToId = null;
+        saveTree();
+        render();
+
+        await fetchReplyForPost(userPost.id);
+      }
+
+      async function fetchReplyForPost(postId) {
+        const post = state.posts[postId];
+        if (!post) return;
+
+        post.error = null;
+        state.loadingParents.add(postId);
+        render();
+
+        const modelId = activeModelId();
+        try {
+          const contents = buildGeminiContents(postId);
+          const reply = await callGemini(contents, modelId);
+
+          const geminiPost = {
+            id: uid(),
+            parentId: postId,
+            author: 'gemini',
+            model: modelId,
+            text: reply.text,
+            rawParts: reply.rawParts,
+            grounding: reply.grounding,
+            createdAt: Date.now(),
+            childrenIds: [],
+            error: null
+          };
+
+          state.posts[geminiPost.id] = geminiPost;
+          if (state.posts[postId]) {
+            state.posts[postId].childrenIds.push(geminiPost.id);
+          }
+          saveTree();
+        } catch (err) {
+          if (state.posts[postId]) {
+            state.posts[postId].error = err.message || 'Request failed';
+            saveTree();
+          }
+        } finally {
+          state.loadingParents.delete(postId);
+          render();
+        }
+      }
+
+      function deleteSubtree(postId) {
+        const node = state.posts[postId];
+        if (!node) return;
+
+        for (const cid of [...node.childrenIds]) {
+          deleteSubtree(cid);
+        }
+
+        if (node.parentId && state.posts[node.parentId]) {
+          state.posts[node.parentId].childrenIds =
+            state.posts[node.parentId].childrenIds.filter(id => id !== postId);
+        } else {
+          state.rootIds = state.rootIds.filter(id => id !== postId);
+        }
+
+        if (state.focusedId === postId) state.focusedId = node.parentId || null;
+        if (state.replyingToId === postId) state.replyingToId = null;
+        delete state.posts[postId];
+      }
+
+      // =========================================================================
+      // FULL CHAT HISTORY EXPORT & IMPORT
+      // =========================================================================
+      function buildExportPayload() {
+        return {
+          app: 'ThreadChat',
+          version: 2,
+          exportedAt: new Date().toISOString(),
+          settings: {
+            model: state.model,
+            customModel: state.customModel,
+            systemPrompt: state.systemPrompt,
+            googleSearch: state.googleSearch
+          },
+          rootIds: state.rootIds.filter(id => Boolean(state.posts[id])),
+          posts: state.posts
+        };
+      }
+
+      function buildMarkdownTranscript() {
+        const lines = [
+          '# ThreadChat Export',
+          'Exported: ' + new Date().toLocaleString(),
+          ''
+        ];
+
+        function walk(postId, depth, branchLabel) {
+          const p = state.posts[postId];
+          if (!p) return;
+          const indent = '  '.repeat(depth);
+          const who = p.author === 'gemini' ? `Gemini (${p.model || 'gemini'})` : 'You';
+          const ts = new Date(p.createdAt || Date.now()).toLocaleString();
+          const label = branchLabel ? ` [${branchLabel}]` : '';
+          lines.push(`${indent}- **${who}**${label} _(${ts})_:`);
+          const bodyLines = String(p.text || '').split('\n');
+          for (const bl of bodyLines) {
+            lines.push(`${indent}  ${bl}`);
+          }
+          if (p.grounding && Array.isArray(p.grounding.sources) && p.grounding.sources.length > 0) {
+            lines.push(`${indent}  _Sources:_ ${p.grounding.sources.map(s => `[${s.title}](${s.uri})`).join(', ')}`);
+          }
+          lines.push('');
+
+          const validKids = (p.childrenIds || []).filter(cid => state.posts[cid]);
+          validKids.forEach((cid, idx) => {
+            const b = validKids.length > 1 ? `Branch ${idx + 1}/${validKids.length}` : null;
+            walk(cid, depth + 1, b);
+          });
+        }
+
+        state.rootIds.forEach((rid, idx) => {
+          if (!state.posts[rid]) return;
+          lines.push('---');
+          lines.push(`## Thread ${idx + 1}`);
+          lines.push('');
+          walk(rid, 0, null);
+        });
+
+        return lines.join('\n');
+      }
+
+      function triggerDownload(filename, content, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+
+      function setTransferStatus(msg, isError = false) {
+        el.transferStatus.textContent = msg;
+        el.transferStatus.className = 'transfer-status ' + (isError ? 'err' : 'ok');
+      }
+
+      function normalizeImportedData(rawText) {
+        const parsed = JSON.parse(rawText);
+        if (!parsed || typeof parsed !== 'object' || !parsed.posts || typeof parsed.posts !== 'object') {
+          throw new Error('JSON must contain a "posts" object.');
+        }
+
+        const rawPosts = parsed.posts;
+        const cleanPosts = {};
+
+        for (const [key, val] of Object.entries(rawPosts)) {
+          if (!val || typeof val !== 'object') continue;
+          const id = typeof val.id === 'string' && val.id ? val.id : key;
+          const text = typeof val.text === 'string' ? val.text : '';
+          const author = val.author === 'gemini' ? 'gemini' : 'user';
+          cleanPosts[id] = {
+            id,
+            parentId: typeof val.parentId === 'string' && val.parentId ? val.parentId : null,
+            author,
+            model: typeof val.model === 'string' ? val.model : undefined,
+            text,
+            rawParts: Array.isArray(val.rawParts) && val.rawParts.length > 0 ? val.rawParts : [{ text }],
+            grounding: (val.grounding && typeof val.grounding === 'object') ? {
+              queries: Array.isArray(val.grounding.queries) ? val.grounding.queries.filter(q => typeof q === 'string') : [],
+              sources: Array.isArray(val.grounding.sources)
+                ? val.grounding.sources
+                    .filter(s => s && typeof s.uri === 'string' && /^https?:\/\//i.test(s.uri))
+                    .map(s => ({ uri: s.uri, title: typeof s.title === 'string' ? s.title : s.uri }))
+                : []
+            } : null,
+            createdAt: typeof val.createdAt === 'number' ? val.createdAt : Date.now(),
+            childrenIds: Array.isArray(val.childrenIds) ? [...val.childrenIds] : [],
+            error: typeof val.error === 'string' ? val.error : null
+          };
+        }
+
+        for (const p of Object.values(cleanPosts)) {
+          p.childrenIds = p.childrenIds.filter(cid => Boolean(cleanPosts[cid]));
+          if (p.parentId && !cleanPosts[p.parentId]) {
+            p.parentId = null;
+          }
+          if (p.parentId && !cleanPosts[p.parentId].childrenIds.includes(p.id)) {
+            cleanPosts[p.parentId].childrenIds.push(p.id);
+          }
+        }
+
+        let cleanRoots = Array.isArray(parsed.rootIds)
+          ? parsed.rootIds.filter(id => cleanPosts[id] && !cleanPosts[id].parentId)
+          : [];
+
+        for (const p of Object.values(cleanPosts)) {
+          if (!p.parentId && !cleanRoots.includes(p.id)) {
+            cleanRoots.push(p.id);
+          }
+        }
+
+        return {
+          posts: cleanPosts,
+          rootIds: cleanRoots,
+          settings: parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : null
+        };
+      }
+
+      function applyImportedData(rawText) {
+        const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'merge';
+        const restoreSettings = el.restoreSettingsChk.checked;
+
+        let normalized;
+        try {
+          normalized = normalizeImportedData(rawText);
+        } catch (err) {
+          setTransferStatus(`Import failed: ${err.message}`, true);
+          return;
+        }
+
+        const importedCount = Object.keys(normalized.posts).length;
+        if (importedCount === 0) {
+          setTransferStatus('No valid posts found in the imported JSON.', true);
+          return;
+        }
+
+        if (mode === 'replace') {
+          if (Object.keys(state.posts).length > 0 &&
+              !confirm(`Replace your current chats with ${importedCount} imported posts?`)) {
+            return;
+          }
+          state.posts = normalized.posts;
+          state.rootIds = normalized.rootIds;
+          state.focusedId = null;
+          state.replyingToId = null;
+        } else {
+          const idMap = {};
+          for (const oldId of Object.keys(normalized.posts)) {
+            idMap[oldId] = state.posts[oldId] ? uid() : oldId;
+          }
+          for (const [oldId, post] of Object.entries(normalized.posts)) {
+            const newId = idMap[oldId];
+            state.posts[newId] = {
+              ...post,
+              id: newId,
+              parentId: post.parentId ? (idMap[post.parentId] || null) : null,
+              childrenIds: post.childrenIds.map(cid => idMap[cid]).filter(Boolean)
+            };
+          }
+          const newRoots = normalized.rootIds.map(rid => idMap[rid]).filter(Boolean);
+          state.rootIds = [...newRoots, ...state.rootIds];
+        }
+
+        if (restoreSettings && normalized.settings) {
+          if (typeof normalized.settings.model === 'string') {
+            state.model = normalized.settings.model;
+            safeStorage.set(STORAGE_KEYS.MODEL, state.model);
+            el.modelSelect.value = state.model;
+          }
+          if (typeof normalized.settings.customModel === 'string') {
+            state.customModel = normalized.settings.customModel;
+            safeStorage.set(STORAGE_KEYS.CUSTOM_MODEL, state.customModel);
+            el.customModelInput.value = state.customModel;
+          }
+          if (typeof normalized.settings.systemPrompt === 'string') {
+            state.systemPrompt = normalized.settings.systemPrompt;
+            safeStorage.set(STORAGE_KEYS.SYSTEM_PROMPT, state.systemPrompt);
+            el.systemPromptInput.value = state.systemPrompt;
+          }
+          if (typeof normalized.settings.googleSearch === 'boolean') {
+            setGoogleSearchEnabled(normalized.settings.googleSearch);
+          }
+          updateCustomModelVisibility();
+        }
+
+        saveTree();
+        render();
+        setTransferStatus(
+          `Successfully imported ${importedCount} ${importedCount === 1 ? 'post' : 'posts'} (${normalized.rootIds.length} ${normalized.rootIds.length === 1 ? 'thread' : 'threads'}) using ${mode} mode.`
+        );
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function renderMarkdown(raw) {
+        const blocks = [];
+        let text = String(raw).replace(FENCE_RE, (_, lang, code) => {
+          const idx = blocks.length;
+          blocks.push(`<pre><code>${escapeHtml(code.replace(/\n$/, ''))}</code></pre>`);
+          return `\u0000BLOCK_${idx}\u0000`;
+        });
+
+        text = escapeHtml(text);
+
+        const inlines = [];
+        text = text.replace(INLINE_CODE_RE, (_, code) => {
+          const idx = inlines.length;
+          inlines.push(`<code>${code}</code>`);
+          return `\u0000INLINE_${idx}\u0000`;
+        });
+
+        text = text
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+          .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+          .replace(/\n/g, '<br>');
+
+        text = text.replace(/\u0000INLINE_(\d+)\u0000/g, (_, i) => inlines[Number(i)]);
+        text = text.replace(/\u0000BLOCK_(\d+)\u0000/g, (_, i) => blocks[Number(i)]);
+        return text;
+      }
+
+      function renderGroundingHtml(grounding) {
+        if (!grounding) return '';
+        const queries = Array.isArray(grounding.queries) ? grounding.queries : [];
+        const sources = Array.isArray(grounding.sources) ? grounding.sources : [];
+        if (queries.length === 0 && sources.length === 0) return '';
+
+        const queriesHtml = queries.length
+          ? `<div class="grounding-queries">🔍 Searched: ${queries.map(q => `"${escapeHtml(q)}"`).join(' · ')}</div>`
+          : '';
+        const sourcesHtml = sources.length
+          ? `<div class="grounding-sources">${sources.map(s =>
+              `<a class="source-pill" href="${escapeHtml(s.uri)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(s.title)}">↗ ${escapeHtml(s.title)}</a>`
+            ).join('')}</div>`
+          : '';
+
+        return `<div class="grounding-box">${queriesHtml}${sourcesHtml}</div>`;
+      }
+
+      function formatTime(ts) {
+        return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      function openContextModal(postId) {
+        const ancestors = getAncestors(postId);
+        el.contextModalBody.innerHTML = '';
+
+        const summary = document.createElement('div');
+        summary.className = 'hint';
+        summary.textContent = `Exact ancestor chain (${ancestors.length} ${ancestors.length === 1 ? 'post' : 'posts'}). Sibling branches are excluded.`;
+        el.contextModalBody.appendChild(summary);
+
+        ancestors.forEach((node, idx) => {
+          const item = document.createElement('div');
+          item.className = 'ctx-item';
+          const roleLabel = node.author === 'user' ? 'User' : `Model (${node.model || 'gemini'})`;
+          item.innerHTML = `
+            <div class="ctx-role ${node.author === 'gemini' ? 'model' : ''}">
+              #${idx + 1} · ${escapeHtml(roleLabel)}
+            </div>
+            <div>${renderMarkdown(node.text)}</div>
+          `;
+          el.contextModalBody.appendChild(item);
+        });
+
+        el.contextModal.classList.add('open');
+      }
+
+      function openBackupModal() {
+        el.transferStatus.className = 'transfer-status';
+        el.transferStatus.textContent = '';
+        updateHistoryStats();
+        el.backupModal.classList.add('open');
+      }
+
+      function createPostElement(post, opts = {}) {
+        const {
+          connectTop = false,
+          connectBottom = false,
+          isFocused = false,
+          siblingBranchInfo = null,
+          hideSubrepliesHint = false
+        } = opts;
+
+        const wrapper = document.createElement('div');
+        const row = document.createElement('article');
+        row.className = 'post' + (isFocused ? ' focused' : '');
+
+        const isGemini = post.author === 'gemini';
+        const ancestorCount = getAncestors(post.id).length;
+        const replyCount = post.childrenIds.length;
+        const hasParent = Boolean(post.parentId && state.posts[post.parentId]);
+        const isGrounded = Boolean(post.grounding && (post.grounding.queries?.length || post.grounding.sources?.length));
+
+        row.innerHTML = `
+          <div class="post-gutter">
+            ${connectTop ? '<div class="thread-connector-top"></div>' : ''}
+            <div class="avatar ${isGemini ? 'avatar-gemini' : 'avatar-user'}">
+              ${isGemini ? '✦' : 'You'}
+            </div>
+            ${connectBottom ? '<div class="thread-connector-bottom"></div>' : ''}
+          </div>
+          <div class="post-main">
+            <div class="post-header">
+              <span class="author-name">${isGemini ? 'Gemini' : 'You'}</span>
+              <span class="author-handle">${isGemini ? '@gemini' : '@you'} · ${formatTime(post.createdAt)}</span>
+              ${isGemini && post.model ? `<span class="model-badge">${escapeHtml(post.model)}</span>` : ''}
+              ${isGrounded ? `<span class="search-badge">🔍 Search Grounded</span>` : ''}
+              ${siblingBranchInfo ? `<span class="branch-badge">${escapeHtml(siblingBranchInfo)}</span>` : ''}
+            </div>
+            <div class="post-content">${renderMarkdown(post.text)}</div>
+            ${renderGroundingHtml(post.grounding)}
+            ${post.error ? `
+              <div class="error-banner">
+                <span>Error: ${escapeHtml(post.error)}</span>
+                <button class="btn btn-sm retry-btn" type="button">Retry</button>
+              </div>
+            ` : ''}
+            <div class="post-actions">
+              ${isFocused && hasParent ? `
+                <button class="action-btn parent-nav go-parent-btn" type="button">↑ Go to Parent</button>
+              ` : ''}
+              <button class="action-btn reply-btn" type="button">💬 Reply</button>
+              ${hideSubrepliesHint && replyCount > 0 ? `
+                <button class="action-btn has-subreplies focus-btn" type="button">
+                  ↳ ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'} · Focus
+                </button>
+              ` : (!isFocused ? `
+                <button class="action-btn focus-btn" type="button">↗ Focus</button>
+              ` : '')}
+              <button class="action-btn copy-btn" type="button">📋 Copy</button>
+              <button class="action-btn ctx-btn" type="button" title="Inspect hidden parent chain sent to Gemini">🧠 Context (${ancestorCount})</button>
+              ${isGemini && post.parentId ? `<button class="action-btn alt-btn" type="button" title="Generate an alternate sibling reply to parent">↻ Alt Reply</button>` : ''}
+              <button class="action-btn delete delete-btn" type="button">🗑 Delete</button>
+            </div>
+          </div>
+        `;
+
+        const goParentBtn = row.querySelector('.go-parent-btn');
+        if (goParentBtn) {
+          goParentBtn.addEventListener('click', () => {
+            state.focusedId = post.parentId;
+            state.replyingToId = null;
+            render();
+          });
+        }
+
+        const focusBtn = row.querySelector('.focus-btn');
+        if (focusBtn) {
+          focusBtn.addEventListener('click', () => {
+            state.focusedId = post.id;
+            state.replyingToId = null;
+            render();
+          });
+        }
+
+        const copyBtn = row.querySelector('.copy-btn');
+        copyBtn.addEventListener('click', async () => {
+          const ok = await copyToClipboard(post.text);
+          copyBtn.textContent = ok ? '✓ Copied' : 'Copy failed';
+          setTimeout(() => { copyBtn.textContent = '📋 Copy'; }, 1400);
+        });
+
+        row.querySelector('.reply-btn').addEventListener('click', () => {
+          state.replyingToId = state.replyingToId === post.id ? null : post.id;
+          render();
+          const box = document.getElementById(`reply-box-${post.id}`);
+          if (box) box.focus();
+        });
+
+        row.querySelector('.ctx-btn').addEventListener('click', () => {
+          openContextModal(post.id);
+        });
+
+        const altBtn = row.querySelector('.alt-btn');
+        if (altBtn) {
+          altBtn.addEventListener('click', () => {
+            state.focusedId = post.parentId;
+            fetchReplyForPost(post.parentId);
+          });
+        }
+
+        const retryBtn = row.querySelector('.retry-btn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', () => fetchReplyForPost(post.id));
+        }
+
+        row.querySelector('.delete-btn').addEventListener('click', () => {
+          if (confirm('Delete this post and all replies beneath it?')) {
+            deleteSubtree(post.id);
+            saveTree();
+            render();
+          }
+        });
+
+        wrapper.appendChild(row);
+
+        if (state.replyingToId === post.id) {
+          const inline = document.createElement('div');
+          inline.className = 'composer-inline';
+          inline.innerHTML = `
+            <div class="composer-body">
+              <textarea id="reply-box-${post.id}" rows="2"
+                placeholder="Reply to ${isGemini ? 'Gemini' : 'your post'}... (${ancestorCount} parent ${ancestorCount === 1 ? 'post' : 'posts'} in context)"
+                style="width:100%;background:#0b0d10;color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;outline:none;"></textarea>
+              <div class="row" style="justify-content:space-between;margin-top:8px;">
+                <span class="hint">Ctrl+Enter to send</span>
+                <div class="row">
+                  <button class="btn btn-sm cancel-reply-btn" type="button">Cancel</button>
+                  <button class="btn btn-primary btn-sm send-reply-btn" type="button">Reply</button>
+                </div>
+              </div>
+            </div>
+          `;
+
+          const ta = inline.querySelector('textarea');
+          const send = () => {
+            if (!ta.value.trim()) {
+              ta.focus();
+              return;
+            }
+            createPostAndReply(ta.value, post.id);
+          };
+          inline.querySelector('.send-reply-btn').addEventListener('click', send);
+          inline.querySelector('.cancel-reply-btn').addEventListener('click', () => {
+            state.replyingToId = null;
+            render();
+          });
+          ta.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              send();
+            }
+          });
+          wrapper.appendChild(inline);
+        }
+
+        if (state.loadingParents.has(post.id)) {
+          const loading = document.createElement('div');
+          loading.className = 'pending-card';
+          loading.innerHTML = `<div class="spinner"></div><span>Gemini (${escapeHtml(activeModelId())}) is replying${state.googleSearch ? ' with Google Search' : ''}...</span>`;
+          wrapper.appendChild(loading);
+        }
+
+        return wrapper;
+      }
+
+      // Render ONLY a post's immediate children (depth = 1, never grandchildren)
+      function renderImmediateChildren(parentPost, container) {
+        const childIds = parentPost.childrenIds.filter(id => state.posts[id]);
+        if (childIds.length === 0) return;
+
+        if (childIds.length === 1) {
+          const child = state.posts[childIds[0]];
+          container.appendChild(createPostElement(child, {
+            connectTop: true,
+            connectBottom: false,
+            hideSubrepliesHint: true
+          }));
+        } else {
+          childIds.forEach((cid, idx) => {
+            const child = state.posts[cid];
+            const branchBox = document.createElement('div');
+            branchBox.className = 'branch-group';
+
+            const label = document.createElement('div');
+            label.className = 'branch-label';
+            label.textContent = `Branch ${idx + 1} of ${childIds.length} (isolated from sibling branches)`;
+            branchBox.appendChild(label);
+
+            branchBox.appendChild(createPostElement(child, {
+              connectTop: false,
+              connectBottom: false,
+              siblingBranchInfo: `Branch ${idx + 1}/${childIds.length}`,
+              hideSubrepliesHint: true
+            }));
+            container.appendChild(branchBox);
+          });
+        }
+      }
+
+      function renderFocusedView() {
+        const focused = state.posts[state.focusedId];
+        if (!focused) {
+          state.focusedId = null;
+          render();
+          return;
+        }
+
+        const hasParent = Boolean(focused.parentId && state.posts[focused.parentId]);
+        const hiddenParents = getAncestors(focused.id).length - 1;
+
+        el.backHomeBtn.style.display = 'inline-block';
+        el.parentBtn.style.display = hasParent ? 'inline-block' : 'none';
+        el.rootComposer.style.display = 'none';
+        el.viewTitle.textContent = 'Focused Post';
+        el.viewSubtitle.textContent = hiddenParents > 0
+          ? `Showing post & immediate replies only (${hiddenParents} parent ${hiddenParents === 1 ? 'post' : 'posts'} hidden · kept in Gemini context)`
+          : 'Showing root post & immediate replies only';
+
+        el.feed.appendChild(createPostElement(focused, {
+          connectTop: false,
+          connectBottom: focused.childrenIds.length === 1,
+          isFocused: true,
+          hideSubrepliesHint: false
+        }));
+
+        const repliesHeader = document.createElement('div');
+        repliesHeader.className = 'section-divider';
+        repliesHeader.textContent = focused.childrenIds.length
+          ? `Immediate Replies (${focused.childrenIds.length})`
+          : 'No replies yet — click Reply above';
+        el.feed.appendChild(repliesHeader);
+
+        renderImmediateChildren(focused, el.feed);
+      }
+
+      function renderTimelineView() {
+        el.backHomeBtn.style.display = 'none';
+        el.parentBtn.style.display = 'none';
+        el.rootComposer.style.display = 'flex';
+        el.viewTitle.textContent = 'Home Timeline';
+        el.viewSubtitle.textContent = `${state.rootIds.length} ${state.rootIds.length === 1 ? 'thread' : 'threads'} · Showing root posts and immediate replies only`;
+
+        if (state.rootIds.length === 0) {
+          el.feed.innerHTML = `
+            <div class="empty-state">
+              <h2>Start a thread with Gemini</h2>
+              <p>Post a message above. Only each post and its immediate replies are shown—click Focus on any reply to step into it, or use "Go to Parent" to step back up.</p>
+            </div>
+          `;
+          return;
+        }
+
+        for (const rootId of state.rootIds) {
+          const rootPost = state.posts[rootId];
+          if (!rootPost) continue;
+
+          const rootWrap = document.createElement('section');
+          rootWrap.className = 'thread-root';
+
+          const hasSingleReply = rootPost.childrenIds.length === 1;
+          rootWrap.appendChild(createPostElement(rootPost, {
+            connectTop: false,
+            connectBottom: hasSingleReply,
+            hideSubrepliesHint: false
+          }));
+
+          renderImmediateChildren(rootPost, rootWrap);
+          el.feed.appendChild(rootWrap);
+        }
+      }
+
+      function render() {
+        updateHistoryStats();
+        el.feed.innerHTML = '';
+        if (state.focusedId && state.posts[state.focusedId]) {
+          renderFocusedView();
+        } else {
+          state.focusedId = null;
+          renderTimelineView();
+        }
+      }
+
+      // Event Listeners
+      el.toggleSidebarBtn.addEventListener('click', () => {
+        state.sidebarCollapsed = !state.sidebarCollapsed;
+        safeStorage.set(STORAGE_KEYS.SIDEBAR_COLLAPSED, state.sidebarCollapsed ? '1' : '0');
+        applySidebarState();
+      });
+
+      el.toggleKeyBtn.addEventListener('click', () => {
+        const isPw = el.apiKeyInput.type === 'password';
+        el.apiKeyInput.type = isPw ? 'text' : 'password';
+        el.toggleKeyBtn.textContent = isPw ? 'Hide' : 'Show';
+      });
+
+      el.apiKeyInput.addEventListener('input', syncApiKeyFromInput);
+
+      el.saveKeyBtn.addEventListener('click', () => {
+        syncApiKeyFromInput();
+        el.saveKeyBtn.textContent = 'Saved!';
+        setTimeout(() => { el.saveKeyBtn.textContent = 'Save'; }, 1200);
+      });
+
+      el.clearKeyBtn.addEventListener('click', () => {
+        state.apiKey = '';
+        el.apiKeyInput.value = '';
+        safeStorage.remove(STORAGE_KEYS.API_KEY);
+        updateKeyStatus();
+      });
+
+      el.modelSelect.addEventListener('change', () => {
+        state.model = el.modelSelect.value;
+        safeStorage.set(STORAGE_KEYS.MODEL, state.model);
+        updateCustomModelVisibility();
+      });
+
+      el.customModelInput.addEventListener('input', () => {
+        state.customModel = el.customModelInput.value;
+        safeStorage.set(STORAGE_KEYS.CUSTOM_MODEL, state.customModel);
+      });
+
+      el.googleSearchChkSidebar.addEventListener('change', (e) => {
+        setGoogleSearchEnabled(e.target.checked);
+      });
+
+      el.googleSearchChkTop.addEventListener('change', (e) => {
+        setGoogleSearchEnabled(e.target.checked);
+      });
+
+      el.systemPromptInput.addEventListener('input', () => {
+        state.systemPrompt = el.systemPromptInput.value;
+        safeStorage.set(STORAGE_KEYS.SYSTEM_PROMPT, state.systemPrompt);
+      });
+
+      el.backHomeBtn.addEventListener('click', () => {
+        state.focusedId = null;
+        state.replyingToId = null;
+        render();
+      });
+
+      el.parentBtn.addEventListener('click', () => {
+        const focused = state.posts[state.focusedId];
+        if (focused && focused.parentId && state.posts[focused.parentId]) {
+          state.focusedId = focused.parentId;
+          state.replyingToId = null;
+          render();
+        }
+      });
+
+      function submitRootPost() {
+        const val = el.rootInput.value;
+        if (!val.trim()) {
+          el.rootInput.focus();
+          el.rootHint.textContent = 'Please type a message first!';
+          el.rootHint.style.color = 'var(--danger)';
+          setTimeout(() => {
+            el.rootHint.textContent = 'New root thread (no prior context)';
+            el.rootHint.style.color = '';
+          }, 2000);
+          return;
+        }
+        el.rootInput.value = '';
+        createPostAndReply(val, null);
+      }
+
+      el.rootPostBtn.addEventListener('click', submitRootPost);
+
+      el.rootInput.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          submitRootPost();
+        }
+      });
+
+      // Modals
+      el.closeModalBtn.addEventListener('click', () => el.contextModal.classList.remove('open'));
+      el.contextModal.addEventListener('click', (e) => {
+        if (e.target === el.contextModal) el.contextModal.classList.remove('open');
+      });
+
+      el.openBackupBtn.addEventListener('click', openBackupModal);
+      el.importBtn.addEventListener('click', openBackupModal);
+      el.closeBackupBtn.addEventListener('click', () => el.backupModal.classList.remove('open'));
+      el.backupModal.addEventListener('click', (e) => {
+        if (e.target === el.backupModal) el.backupModal.classList.remove('open');
+      });
+
+      function exportFullJson() {
+        const payload = JSON.stringify(buildExportPayload(), null, 2);
+        triggerDownload(`threadchat-history-${Date.now()}.json`, payload, 'application/json');
+        setTransferStatus('Downloaded full JSON chat history.');
+      }
+
+      el.exportBtn.addEventListener('click', exportFullJson);
+      el.downloadJsonBtn.addEventListener('click', exportFullJson);
+
+      el.downloadMdBtn.addEventListener('click', () => {
+        const md = buildMarkdownTranscript();
+        triggerDownload(`threadchat-transcript-${Date.now()}.md`, md, 'text/markdown');
+        setTransferStatus('Downloaded Markdown transcript.');
+      });
+
+      el.copyJsonBtn.addEventListener('click', async () => {
+        const payload = JSON.stringify(buildExportPayload(), null, 2);
+        const ok = await copyToClipboard(payload);
+        if (ok) {
+          setTransferStatus('Copied full JSON chat history to clipboard.');
+        } else {
+          el.pasteJsonInput.value = payload;
+          el.pasteJsonInput.select();
+          setTransferStatus('Clipboard blocked—JSON placed in the text box below so you can copy it manually.');
+        }
+      });
+
+      el.chooseFileImportBtn.addEventListener('click', () => el.importFileInput.click());
+      el.importFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          applyImportedData(text);
+        } catch {
+          setTransferStatus('Could not read the selected file.', true);
+        } finally {
+          el.importFileInput.value = '';
+        }
+      });
+
+      el.importPasteBtn.addEventListener('click', () => {
+        const text = el.pasteJsonInput.value.trim();
+        if (!text) {
+          setTransferStatus('Paste your exported JSON into the box first.', true);
+          return;
+        }
+        applyImportedData(text);
+      });
+
+      el.clearAllBtn.addEventListener('click', () => {
+        if (confirm('Delete all threads and posts?')) {
+          state.posts = {};
+          state.rootIds = [];
+          state.focusedId = null;
+          state.replyingToId = null;
+          saveTree();
+          render();
+        }
+      });
+
+      render();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initThreadChat);
+    } else {
+      initThreadChat();
+    }
+  </script>
+</body>
+</html>
